@@ -101,11 +101,10 @@
             </h1>
             <p class="text-white-50 fs-5 text-center mt-2 mb-0">Developed by Ayan Paul</p>
         </div>
-            <div class="flex-grow-1 text-end">
-                <button class="btn btn-outline-light btn-sm rounded-pill px-3" onclick="logout()">
-                    <i class="fas fa-sign-out-alt me-1"></i> Logout
-                </button>
-            </div>
+        <div class="d-flex justify-content-end mb-3">
+            <button class="btn btn-outline-light btn-sm rounded-pill px-3" onclick="window.logoutUser()">
+                <i class="fas fa-sign-out-alt me-1"></i> Logout
+            </button>
         </div>
         <p class="text-white-50 text-center mb-4">Logged in as: <span id="userEmailDisplay" class="fw-bold text-white"></span></p>
 
@@ -214,9 +213,14 @@
                         <div class="card">
                             <div class="card-header d-flex justify-content-between align-items-center">
                                 <h5 class="mb-0"><i class="fas fa-list-alt me-2"></i>History</h5>
-                                <button class="btn btn-sm btn-outline-light" onclick="window.clearAllExpenses()" id="clearBtn" style="display:none;">
-                                    <i class="fas fa-trash-alt me-1"></i> Clear All
-                                </button>
+                                <div>
+                                    <button class="btn btn-sm btn-outline-light me-2" onclick="window.exportData()" title="Download Your Data">
+                                        <i class="fas fa-download me-1"></i> Export JSON
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-light" onclick="window.clearAllExpenses()" id="clearBtn" style="display:none;">
+                                        <i class="fas fa-trash-alt me-1"></i> Clear All
+                                    </button>
+                                </div>
                             </div>
                             <div class="card-body p-0">
                                 <div class="table-responsive">
@@ -341,17 +345,15 @@
     <!-- Firebase SDK -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        // Added 'updateDoc' to the imports for renaming members in Firebase
         import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, query, orderBy, getDocs, where, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-        // --- NEW: Firebase Auth Imports ---
         import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
         // --- PASTE YOUR FIREBASE CONFIG HERE ---
         const firebaseConfig = {
-            apiKey: "AIzaSyApd9DjctdRjfUarmwzQyOEQYxvOfGlapI",
-            authDomain: "expense-tracker-a2026.firebaseapp.com",
+            apiKey: "Aasdfasdf*********************OfGlapI",
+            authDomain: "***************************",
             projectId: "expense-tracker-a2026",
-            storageBucket: "expense-tracker-a2026.firebasestorage.app",
+            storageBucket: "expe************************storage.app",
             messagingSenderId: "194900105334",
             appId: "1:194900105334:web:90f88de98384e2d3b16757",
             measurementId: "G-JYW0V6CPYP"
@@ -360,7 +362,7 @@
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
-        const auth = getAuth(app); // Initialize Auth
+        const auth = getAuth(app);
         const expensesCollection = collection(db, "expenses");
 
         let expenses = [];
@@ -440,7 +442,7 @@
                 window.renderUserDropdown();
                 window.renderMembersList();
                 
-                // Update existing expenses in Firebase to reflect the new name for historical consistency
+                // STRICTLY update only the current user's expenses
                 if (currentUser) {
                     try {
                         const q = query(expensesCollection, where("userId", "==", currentUser.uid), where("user", "==", oldName));
@@ -467,6 +469,58 @@
                 saveMembers();
                 window.renderUserDropdown();
                 window.renderMembersList();
+            }
+        }
+
+        // --- STRICT USER-WISE DATA EXPORT ---
+        window.exportData = async function() {
+            if (!currentUser) {
+                alert("Please log in first.");
+                return;
+            }
+
+            const btn = event.target.closest('button');
+            const originalHTML = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Exporting...';
+            btn.disabled = true;
+
+            try {
+                // STRICTLY fetch ONLY the current user's expenses
+                const q = query(expensesCollection, where("userId", "==", currentUser.uid));
+                const snapshot = await getDocs(q);
+                
+                const dataToExport = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+
+                if (dataToExport.length === 0) {
+                    alert("No data to export!");
+                    btn.innerHTML = originalHTML;
+                    btn.disabled = false;
+                    return;
+                }
+
+                // Create a JSON file and trigger download
+                const jsonString = JSON.stringify(dataToExport, null, 2);
+                const blob = new Blob([jsonString], { type: "application/json" });
+                const url = URL.createObjectURL(blob);
+                
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `expense_backup_${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                alert(`Successfully exported ${dataToExport.length} records for your account!`);
+            } catch (error) {
+                console.error("Export Error:", error);
+                alert("Error exporting data: " + error.message);
+            } finally {
+                btn.innerHTML = originalHTML;
+                btn.disabled = false;
             }
         }
 
@@ -518,20 +572,18 @@
                 document.getElementById('userEmailDisplay').textContent = user.email;
                 document.getElementById('date').valueAsDate = new Date();
                 
-                // Initialize member dropdown and list on login
                 window.renderUserDropdown();
                 window.renderMembersList();
-                
                 startRealtimeListener();
             } else {
                 currentUser = null;
                 document.getElementById('authScreen').style.display = 'flex';
                 document.getElementById('mainApp').style.display = 'none';
-                if (unsubscribe) unsubscribe(); // Stop listening when logged out
+                if (unsubscribe) unsubscribe();
             }
         });
 
-        // CHANGE 2: Added 'where' clause to only fetch the current user's data
+        // STRICTLY fetch only the current user's data
         function startRealtimeListener() {
             if (unsubscribe) unsubscribe();
             const q = query(expensesCollection, where("userId", "==", currentUser.uid), orderBy("date", "desc"));
@@ -541,7 +593,7 @@
             });
         }
 
-        // --- YOUR EXACT EXISTING LOGIC BELOW ---
+        // --- EXISTING LOGIC BELOW ---
         function getSortKey(dateString) {
             const date = new Date(dateString);
             return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0');
@@ -599,7 +651,7 @@
 
         document.getElementById('expenseForm').addEventListener('submit', async function(e) {
             e.preventDefault();
-            if (!currentUser) return; // Safety check
+            if (!currentUser) return;
             const btn = document.getElementById('submitBtn');
             const originalText = btn.innerHTML;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Saving...';
@@ -607,13 +659,13 @@
 
             try {
                 await addDoc(expensesCollection, {
-                    userId: currentUser.uid, // CHANGE 3: REQUIRED by your new Firestore Rules
+                    userId: currentUser.uid, // STRICT: Ties data to this specific user
                     date: document.getElementById('date').value,
                     user: document.getElementById('user').value,
                     category: document.getElementById('category').value,
                     description: document.getElementById('description').value,
-                    amount: parseFloat(document.getElementById('amount').value), // Saved as a number
-                    createdBy: currentUser.email // Tracks who added it
+                    amount: parseFloat(document.getElementById('amount').value),
+                    createdBy: currentUser.email
                 });
                 document.getElementById('category').value = '';
                 document.getElementById('description').value = '';
@@ -629,6 +681,7 @@
         window.deleteExpense = async function(id) {
             if(confirm('Delete this expense?')) {
                 try {
+                    // Note: Firestore Security Rules MUST be set to allow delete only if resource.data.userId == request.auth.uid
                     await deleteDoc(doc(db, "expenses", id));
                 } catch (error) {
                     alert("Error deleting: " + error.message);
@@ -636,7 +689,7 @@
             }
         }
 
-        // CHANGE 4: Only delete the current user's expenses
+        // STRICTLY delete only the current user's expenses
         window.clearAllExpenses = async function() {
             if(confirm('Are you sure you want to delete ALL YOUR expenses? This cannot be undone.')) {
                 try {
